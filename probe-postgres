@@ -1,0 +1,132 @@
+'''
+Copyright (c) 2017, Opsani
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+License template: http://opensource.org/licenses/BSD-2-Clause
+                  (as accessed on June 2, 2015)
+
+probe-postgres - probe for assessing postgres instance(s) over a network
+'''
+from __future__   import print_function
+from probe_common import skpp
+from probe_common import probe
+
+import psycopg2
+import sys
+
+# === definitions
+
+_dflt_timeout    = 120          # default action timeout in seconds
+_dflt_port       = 5432         # default port
+_dflt_database   = 'postgres'   # default db name (same as default user)
+_dflt_user       = 'postgres'   # default user
+_dflt_password   = None         # default password
+_connect_timeout = 2            # socket_connect timeout in seconds
+
+# === operations
+
+def _postgres_access(host, auth_failure_ok=False, port=_dflt_port,
+    database=_dflt_database, user=_dflt_user, password=_dflt_password, **dummy):
+    '''
+    Connect to postres and list all databases, including templates (these may be
+    the only databases).  To verify only that the postgres service is up, pass
+    auth_failure_ok=True.
+    '''
+    try:
+        conn = psycopg2.connect(host=host, port=port, dbname=database, user=user,
+            password=password, connect_timeout=_connect_timeout)
+        cur = conn.cursor()
+        cur.execute("SELECT datname FROM pg_database;")
+        result = cur.fetchone()  # raises exception if cur.execute() produced no results
+        conn.close()
+    except psycopg2.OperationalError as e:
+        # note:  the psycopg2 mapping of postgres errors to e.pgcode and e.pgerror
+        # only works once you have a functional connection object.  Before then,
+        # there is no way to get a postgres error code.  Everything is lumped
+        # under OperationalError (for example, invalid database, auth failure, or
+        # connection refused).  Leaving us to distinguish error types by the string
+        # message contents.  See "https://stackoverflow.com/questions/37851375/how-
+        # to-catch-specific-postgres-exceptions-in-python-psycopg2"
+        estr = str(e)
+        auth_failure_ok_errs = [
+            'FATAL:  database "{}" does not exist'.format(database),
+            'FATAL:  password authentication failed for user "{}"'.format(user),
+            'fe_sendauth: no password supplied'
+        ]
+        for fstr in auth_failure_ok_errs:
+            if estr.startswith(fstr):
+                if auth_failure_ok:
+                    return
+                raise probe.UserValidationError('failed to verify postgres at {}:{}: {}'.format(host, port, e))
+        raise probe.UserError('failed to verify postgres at {}:{}: {}'.format(host, port, e))
+    except Exception as e:
+        raise probe.UserError('failed to verify postgres at {}:{}: {}'.format(host, port, e))
+
+# === action handlers
+
+def _service_up(project, inst=[], **args):
+    '''
+    Connect to each instance and list its databases:  no-op if no instances,
+    fail on first failure.  Do NOT fail on authentication failure.
+    '''
+    for i in inst:
+        probe.wait_retry_op(args.get('timeout', _dflt_timeout),
+            lambda: _postgres_access(host=probe.extract_ip(i), auth_failure_ok=True, **args))
+    return
+
+def _check_access(project, inst=[], **args):
+    '''
+    Connect to each instance, list its databases:  no-op if no instances, fail
+    on first failure (including authentication failure).
+    '''
+    for i in inst:
+        probe.wait_retry_op(args.get('timeout', _dflt_timeout),
+            lambda: _postgres_access(host=probe.extract_ip(i), **args))
+    return
+
+# === Skopos plugin action wrappers
+
+@skpp.action
+def service_up(**args):
+    try:
+        _service_up(**args)
+    except (probe.UserError, probe.UserValidationError) as e:
+        print('Error:', str(e), file=sys.stderr)
+        sys.exit(1)
+    return args
+
+@skpp.action
+def check_access(**args):
+    try:
+        _check_access(**args)
+    except (probe.UserError, probe.UserValidationError) as e:
+        print('Error:', str(e), file=sys.stderr)
+        sys.exit(1)
+    return args
+
+# === Main
+
+if __name__ == "__main__":
+    skpp.run('probe-postgres', globals())
