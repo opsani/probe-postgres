@@ -12,7 +12,7 @@ These actions support the following arguments:
 * `user` - user (default `postgres`)
 * `password` - password (default `None`)
 * `database` - database (default `postgres`)
-* `timeout` - operation timeout *per service instance*, in seconds (default `120`).  This is how long to keep retrying if the postgres service does not respond.
+* `timeout` - operation timeout *per service instance*, in seconds (default `30`).  This is how long to keep retrying if the postgres service does not respond.
 
 ## examples
 
@@ -33,7 +33,7 @@ quality_gates:
                 image: opsani/probe-postgres:v1
                 action: check_access
                 label: "check postgres access on alternate port with timeout"
-                arguments: { port: 10000, timeout: 30 }
+                arguments: { port: 10000, timeout: 15 }
             - probe:
                 image: opsani/probe-postgres:v1
                 action: check_access

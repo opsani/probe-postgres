@@ -38,7 +38,7 @@ import sys
 
 # === definitions
 
-_dflt_timeout    = 120          # default action timeout in seconds
+_dflt_timeout    = 30           # default action timeout in seconds
 _dflt_port       = 5432         # default port
 _dflt_database   = 'postgres'   # default db name (same as default user)
 _dflt_user       = 'postgres'   # default user
