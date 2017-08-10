@@ -14,6 +14,8 @@ These actions support the following arguments:
 * `database` - database (default `postgres`)
 * `timeout` - operation timeout *per service instance*, in seconds (default `30`).  This is how long to keep retrying if the postgres service does not respond.
 
+Docker Hub repository:  <https://hub.docker.com/r/opsani/probe-postgres/>
+
 ## examples
 
 Here are a few examples in the form of quality gates specified in a Skopos TED file (target environment descriptor).  Quality gates associate probe executions to one or more component images.  During application deployment Skopos executes the specified probes to assess components deployed with matching images.
@@ -26,16 +28,16 @@ quality_gates:
         steps:
 
             # verify postgres service is up (default action service_up)
-            - probe: opsani/probe-postgres:v1
+            - probe: opsani/probe-postgres
 
             # verify postgres access
             - probe:
-                image: opsani/probe-postgres:v1
+                image: opsani/probe-postgres
                 action: check_access
                 label: "check postgres access on alternate port with timeout"
                 arguments: { port: 10000, timeout: 15 }
             - probe:
-                image: opsani/probe-postgres:v1
+                image: opsani/probe-postgres
                 action: check_access
                 label: "check postgres access with user/password/database"
                 arguments:
