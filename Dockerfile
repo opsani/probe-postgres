@@ -1,14 +1,20 @@
-# minimial apline linux with python 3.5:  ~64 MB
-FROM jfloff/alpine-python:latest-slim
-MAINTAINER Stephen Quintero <stephen@opsani.com>
+FROM alpine:latest
+
+LABEL maintainer "Opsani <support@opsani.com>"
 
 WORKDIR /skopos
 
-# Install curl, psycopg2 (postgres adapter)
-USER root
-RUN apk add --update curl py3-psycopg2
+RUN set -x && \
+    apk update && \
+    apk upgrade && \
+    apk add --update --no-cache \
+        ca-certificates \
+        python3 \
+        py3-psycopg2 && \
+    rm -rf /var/cache/apk/*
 
 COPY probe-postgres /skopos/
+
 ADD probe_common /skopos/probe_common
 
 ENTRYPOINT [ "python3", "probe-postgres" ]
